@@ -1,0 +1,29 @@
+provider "aws" {
+  region = var.customer_region
+}
+
+# Accepter's side of the connection.
+# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/vpc_peering_connection
+data "aws_vpc_peering_connection" "accepter" {
+  vpc_id      = confluent_network.peering.aws[0].vpc
+  peer_vpc_id = confluent_peering.aws.aws[0].vpc
+}
+
+# https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_peering_connection_accepter
+resource "aws_vpc_peering_connection_accepter" "peer" {
+  vpc_peering_connection_id = data.aws_vpc_peering_connection.accepter.id
+  auto_accept               = true
+}
+
+# Find the routing table
+data "aws_route_tables" "rts" {
+  vpc_id = var.vpc_id
+}
+
+resource "aws_route" "r" {
+  for_each                  = toset(data.aws_route_tables.rts.ids)
+  route_table_id            = each.key
+  destination_cidr_block    = confluent_network.peering.cidr
+  vpc_peering_connection_id = data.aws_vpc_peering_connection.accepter.id
+}
+
